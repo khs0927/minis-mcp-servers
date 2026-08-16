@@ -14,22 +14,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Inspect strongest Qwen3.8 backup candidates
+      - name: Execute exact-model ZeroGPU candidate and inspect second candidate
         run: |
           set -euo pipefail
-          for ID in 'akhaliq/Qwen3.8-27B' 'Yinhaoc/qwen3.8-27b-demo' 'apathy-exe/Qwen3.8-27B' 'apathy-exe/Qwen3.8-27B-2' 'Daankular/Qwen3.8-27B' 'NodeLinker/Qwen-3.8-27B-H200'; do
-            echo "=== $ID ==="
-            META=$(curl -fsS --max-time 20 "https://huggingface.co/api/spaces/$ID")
-            SUB=$(printf '%s' "$META" | jq -r '.subdomain')
-            BASE="https://$SUB.hf.space"
-            printf '%s' "$META" | jq '{id,sdk,runtime,models,tags}'
-            echo "BASE=$BASE"
-            if curl -fsS --max-time 15 "$BASE/gradio_api/info" -o /tmp/info.json; then
-              jq '{named_endpoints: (.named_endpoints | with_entries(.value |= {api_visibility, description, parameters: [.parameters[]? | {parameter_name, parameter_default, parameter_has_default, type}]}))}' /tmp/info.json
-            else
-              echo 'NO_GRADIO_INFO'
-            fi
-            echo 'ROOT_URLS:'
-            curl -fsSL --max-time 15 "$BASE/" 2>/dev/null | grep -Eo 'https://[^"<> ]+' | head -20 || true
-            echo
-          done
+          YBASE='https://yinhaoc-qwen3-8-27b-demo.hf.space'
+          echo '=== Yinhaoc exact Qwen3.8 live inference ==='
+          SUBMIT=$(curl -fsS --max-time 30 -X POST "$YBASE/gradio_api/call/v2/chat" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"enable_thinking":false,"reasoning_effort":"low","max_tokens":512}')
+          echo "$SUBMIT"
+          EVENT_ID=$(printf '%s' "$SUBMIT" | jq -r '.event_id')
+          test -n "$EVENT_ID" && test "$EVENT_ID" != 'null'
+          curl -fsS -N --max-time 150 "$YBASE/gradio_api/call/chat/$EVENT_ID" | tee /tmp/yinhaoc.sse
+          echo
+          echo '=== akhaliq endpoint schema ==='
+          curl -fsS --max-time 20 'https://akhaliq-qwen3-8-27b.hf.space/gradio_api/info' | jq '.named_endpoints["/answer"] | {api_visibility,description,parameters:[.parameters[]|{label,parameter_name,parameter_default,parameter_has_default,example_input,type}],code_snippets}'
