@@ -14,22 +14,21 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Probe and run public Qwen3.8 backup
+      - name: Search and probe public Qwen3.8 Spaces
         run: |
           set -euo pipefail
-          GATEWAY='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api/provider-probe'
-          curl -fsS --max-time 30 "$GATEWAY" | tee /tmp/probe.json
-          BASE=$(jq -r '.baseUrl' /tmp/probe.json)
+          echo '--- HF Space search ---'
+          curl -fsS --max-time 30 'https://huggingface.co/api/spaces?search=Qwen3.8-27B&limit=50&full=true' -o /tmp/spaces.json
+          jq -r '.[] | [.id, (.runtime.stage // ""), (.runtime.hardware.current // ""), (.sdk // ""), ((.tags // [])|join(","))] | @tsv' /tmp/spaces.json
           echo
-          echo '--- provider summary ---'
-          jq '{name,repo,baseUrl,metadata,openapi,usableAsPublicApi}' /tmp/probe.json
-          echo
-          echo '--- live inference submit ---'
-          SUBMIT=$(curl -fsS --max-time 30 -X POST "$BASE/gradio_api/call/v2/respond" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"reasoning":"off","temperature":0.1,"top_p":0.8,"top_k":20}')
-          echo "$SUBMIT"
-          EVENT_ID=$(printf '%s' "$SUBMIT" | jq -r '.event_id')
-          test -n "$EVENT_ID" && test "$EVENT_ID" != 'null'
-          echo
-          echo '--- live inference result ---'
-          curl -fsS -N --max-time 120 "$BASE/gradio_api/call/respond/$EVENT_ID" | tee /tmp/result.sse
-          grep -Eq '^event: (complete|generating)' /tmp/result.sse
+          echo '--- candidate OpenAPI probes ---'
+          jq -r '.[].id' /tmp/spaces.json | while read -r ID; do
+            META=$(curl -fsS --max-time 15 "https://huggingface.co/api/spaces/$ID" || true)
+            SUB=$(printf '%s' "$META" | jq -r '.subdomain // empty' 2>/dev/null || true)
+            STAGE=$(printf '%s' "$META" | jq -r '.runtime.stage // empty' 2>/dev/null || true)
+            [ -n "$SUB" ] || continue
+            BASE="https://$SUB.hf.space"
+            CODE=$(curl -sS -o /tmp/openapi.json -w '%{http_code}' --max-time 10 "$BASE/gradio_api/openapi.json" || true)
+            PATHS=$(jq -r '[.paths|keys[]? | select(test("/call/"))] | join(",")' /tmp/openapi.json 2>/dev/null || true)
+            printf '%s\t%s\t%s\t%s\t%s\n' "$ID" "$STAGE" "$BASE" "$CODE" "$PATHS"
+          done
