@@ -14,16 +14,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Execute exact-model ZeroGPU candidate and inspect second candidate
+      - name: Extract independent H200 endpoints
         run: |
           set -euo pipefail
-          YBASE='https://yinhaoc-qwen3-8-27b-demo.hf.space'
-          echo '=== Yinhaoc exact Qwen3.8 live inference ==='
-          SUBMIT=$(curl -fsS --max-time 30 -X POST "$YBASE/gradio_api/call/v2/chat" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"enable_thinking":false,"reasoning_effort":"low","max_tokens":512}')
-          echo "$SUBMIT"
-          EVENT_ID=$(printf '%s' "$SUBMIT" | jq -r '.event_id')
-          test -n "$EVENT_ID" && test "$EVENT_ID" != 'null'
-          curl -fsS -N --max-time 150 "$YBASE/gradio_api/call/chat/$EVENT_ID" | tee /tmp/yinhaoc.sse
-          echo
-          echo '=== akhaliq endpoint schema ==='
-          curl -fsS --max-time 20 'https://akhaliq-qwen3-8-27b.hf.space/gradio_api/info' | jq '.named_endpoints["/answer"] | {api_visibility,description,parameters:[.parameters[]|{label,parameter_name,parameter_default,parameter_has_default,example_input,type}],code_snippets}'
+          for BASE in 'https://nodelinker-qwen-3-8-27b-h200.hf.space' 'https://victor-qwen3-8-27b-free-endpoint.hf.space'; do
+            echo "=== $BASE ==="
+            curl -fsSL --max-time 20 "$BASE/" -o /tmp/page.html
+            grep -Eo 'https://[^"<>[:space:]]+' /tmp/page.html | sed 's/[),;]$//' | sort -u | grep -E 'endpoints\.huggingface\.cloud|/v1|qwen|Qwen' || true
+            grep -Eo 'https://[A-Za-z0-9._-]+\.aws\.endpoints\.huggingface\.cloud(/v1)?' /tmp/page.html | sort -u || true
+          done
