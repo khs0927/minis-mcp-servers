@@ -17,7 +17,8 @@ jobs:
       - name: Probe live gateway backup discovery
         run: |
           set -euo pipefail
-          curl -fsS --max-time 30 'https://qwen3-8-free-gateway-n995yy.v2.appdeploy.ai/api/provider-probe' | tee /tmp/probe.json
+          API='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api/provider-probe'
+          curl -fsS --max-time 30 "$API" | tee /tmp/probe.json
           echo
           echo '--- parsed summary ---'
           jq '{name,repo,baseUrl,metadata,openapi,info,mcp,usableAsPublicApi,usableAsPublicMcp}' /tmp/probe.json
