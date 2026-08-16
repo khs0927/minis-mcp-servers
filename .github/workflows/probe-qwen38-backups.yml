@@ -1,25 +1,39 @@
-name: Probe Qwen3.8 Free Backups
+name: Monitor Qwen3.8 Free Providers
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/probe-qwen38-backups.yml'
+  schedule:
+    - cron: '17 */6 * * *'
 
 jobs:
-  probe:
+  health:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Extract independent H200 endpoints
+      - name: Check gateway and both free providers
         run: |
           set -euo pipefail
-          for BASE in 'https://nodelinker-qwen-3-8-27b-h200.hf.space' 'https://victor-qwen3-8-27b-free-endpoint.hf.space'; do
-            echo "=== $BASE ==="
-            curl -fsSL --max-time 20 "$BASE/" -o /tmp/page.html
-            grep -Eo 'https://[^"<>[:space:]]+' /tmp/page.html | sed 's/[),;]$//' | sort -u | grep -E 'endpoints\.huggingface\.cloud|/v1|qwen|Qwen' || true
-            grep -Eo 'https://[A-Za-z0-9._-]+\.aws\.endpoints\.huggingface\.cloud(/v1)?' /tmp/page.html | sort -u || true
-          done
+          PRIMARY='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1/models'
+          BACKUP='https://yinhaoc-qwen3-8-27b-demo.hf.space/gradio_api/info'
+          GATEWAY='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api/health'
+
+          primary_code=$(curl -sS -o /tmp/primary.json -w '%{http_code}' --max-time 15 "$PRIMARY" || true)
+          backup_code=$(curl -sS -o /tmp/backup.json -w '%{http_code}' --max-time 15 "$BACKUP" || true)
+          gateway_code=$(curl -sS -o /tmp/gateway.json -w '%{http_code}' --max-time 20 "$GATEWAY" || true)
+
+          backup_public=$(jq -r '.named_endpoints["/chat"].api_visibility // ""' /tmp/backup.json 2>/dev/null || true)
+          primary_ok=false
+          backup_ok=false
+          [ "$primary_code" = '200' ] && primary_ok=true
+          [ "$backup_code" = '200' ] && [ "$backup_public" = 'public' ] && backup_ok=true
+
+          echo "primary_http=$primary_code primary_ok=$primary_ok"
+          echo "backup_http=$backup_code backup_public=$backup_public backup_ok=$backup_ok"
+          echo "gateway_http=$gateway_code"
+          if [ -s /tmp/gateway.json ]; then jq '{version,freeOnly,activeProvider,failoverProvider,checks}' /tmp/gateway.json || true; fi
+
+          if [ "$primary_ok" != 'true' ] && [ "$backup_ok" != 'true' ]; then
+            echo 'Both zero-cost Qwen3.8 providers are unavailable.' >&2
+            exit 1
+          fi
