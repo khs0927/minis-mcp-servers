@@ -28,52 +28,41 @@ jobs:
           test "$(jq -r '.apiAuth.required' /tmp/health.json)" = 'true'
           test "$models_code" = '401'
 
-      - name: Probe primary H200 directly
+      - name: Compare primary H200 chat payloads
         continue-on-error: true
         run: |
           set +e
-          PRIMARY='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1'
-          echo '--- primary /models ---'
-          curl -sS -D /tmp/primary-headers -o /tmp/primary-models --max-time 30 "$PRIMARY/models"
-          code=$?
-          cat /tmp/primary-headers || true
-          head -c 1000 /tmp/primary-models || true
-          echo
-          echo "curl_exit=$code"
-          echo '--- primary tiny chat ---'
-          curl -sS -D /tmp/primary-chat-headers -o /tmp/primary-chat --max-time 30 "$PRIMARY/chat/completions" -H 'Content-Type: application/json' -d '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":16,"stream":false}'
-          code=$?
-          cat /tmp/primary-chat-headers || true
-          head -c 2000 /tmp/primary-chat || true
-          echo
-          echo "curl_exit=$code"
+          PRIMARY='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions'
+          probe() {
+            label="$1"
+            payload="$2"
+            echo "--- $label ---"
+            curl -sS --max-time 70 -w '\nhttp=%{http_code} total=%{time_total} starttransfer=%{time_starttransfer}\n' "$PRIMARY" -H 'Content-Type: application/json' -d "$payload" -o "/tmp/$label.json"
+            code=$?
+            jq '{id,choices:[.choices[]? | {finish_reason,message:{content:.message.content,reasoning:.message.reasoning}}],usage}' "/tmp/$label.json" || cat "/tmp/$label.json"
+            echo "curl_exit=$code"
+          }
+          probe tiny16 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":16,"stream":false}'
+          probe low256 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":256,"reasoning_effort":"low","stream":false}'
+          probe plain512 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":512,"stream":false}'
+          probe low512 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":512,"reasoning_effort":"low","stream":false}'
 
       - name: Probe ZeroGPU directly
         continue-on-error: true
         run: |
           set +e
           SPACE='https://yinhaoc-qwen3-8-27b-demo.hf.space'
-          echo '--- ZeroGPU info ---'
           curl -sS --max-time 30 "$SPACE/gradio_api/info" -o /tmp/info.json
-          jq '.named_endpoints["/chat"] | {api_visibility,parameters,returns}' /tmp/info.json || cat /tmp/info.json
-          echo '--- ZeroGPU submit ---'
+          echo "visibility=$(jq -r '.named_endpoints["/chat"].api_visibility // "missing"' /tmp/info.json)"
           curl -sS --max-time 30 "$SPACE/gradio_api/call/v2/chat" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"enable_thinking":false,"reasoning_effort":"low","max_tokens":512}' -o /tmp/submit.json
           cat /tmp/submit.json
-          echo
           EVENT_ID=$(jq -r '.event_id // empty' /tmp/submit.json)
-          if [ -z "$EVENT_ID" ]; then echo 'no_event_id'; exit 0; fi
-          echo "event_id=$EVENT_ID"
-          echo '--- ZeroGPU SSE ---'
-          curl -sS -N --max-time 45 "$SPACE/gradio_api/call/chat/$EVENT_ID" -o /tmp/events.txt
-          code=$?
-          cat /tmp/events.txt
-          echo
-          echo "curl_exit=$code"
+          if [ -n "$EVENT_ID" ]; then curl -sS -N --max-time 45 "$SPACE/gradio_api/call/chat/$EVENT_ID" || true; fi
 
-      - name: Probe deployed gateway fallback
+      - name: Probe deployed gateway
         continue-on-error: true
         run: |
           set +e
           API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          curl -sS --max-time 45 "$API_ROOT/provider-probe" -o /tmp/probe.json
+          curl -sS --max-time 70 -w '\nhttp=%{http_code} total=%{time_total}\n' "$API_ROOT/provider-probe" -o /tmp/probe.json
           jq . /tmp/probe.json || cat /tmp/probe.json
