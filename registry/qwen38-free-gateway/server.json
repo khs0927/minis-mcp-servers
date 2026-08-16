@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.khs0927/qwen38-free-gateway",
-  "description": "Free-first Qwen3.8-27B OpenAI-compatible gateway with failover, health checks, and MCP.",
-  "version": "0.2.0",
+  "description": "Free-first Qwen3.8-27B gateway with ranked failover, health checks, and MCP.",
+  "version": "0.3.0",
   "websiteUrl": "https://qwen3-8-free-gateway-n995yy.v2.appdeploy.ai/",
   "remotes": [
     {
@@ -12,7 +12,7 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "keywords": ["qwen", "qwen3.8", "llm", "gateway", "openai-compatible", "failover", "free-first"]
+      "keywords": ["qwen", "qwen3.8", "llm", "gateway", "openai-compatible", "failover", "free-first", "provider-ranking"]
     }
   }
 }
