@@ -1,0 +1,23 @@
+name: Probe Qwen3.8 Free Backups
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/probe-qwen38-backups.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Probe live gateway backup discovery
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 'https://qwen3-8-free-gateway-n995yy.v2.appdeploy.ai/api/provider-probe' | tee /tmp/probe.json
+          echo
+          echo '--- parsed summary ---'
+          jq '{name,repo,baseUrl,metadata,openapi,info,mcp,usableAsPublicApi,usableAsPublicMcp}' /tmp/probe.json
