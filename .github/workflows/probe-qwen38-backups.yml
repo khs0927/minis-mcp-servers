@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Probe live gateway backup discovery
+      - name: Probe and run public Qwen3.8 backup
         run: |
           set -euo pipefail
           GATEWAY='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api/provider-probe'
@@ -22,10 +22,14 @@ jobs:
           BASE=$(jq -r '.baseUrl' /tmp/probe.json)
           echo
           echo '--- provider summary ---'
-          jq '{name,repo,baseUrl,metadata,openapi,info,mcp,usableAsPublicApi,usableAsPublicMcp}' /tmp/probe.json
+          jq '{name,repo,baseUrl,metadata,openapi,usableAsPublicApi}' /tmp/probe.json
           echo
-          echo '--- respond OpenAPI ---'
-          curl -fsS --max-time 20 "$BASE/gradio_api/openapi.json" | jq '.paths["/gradio_api/call/v2/respond"]'
+          echo '--- live inference submit ---'
+          SUBMIT=$(curl -fsS --max-time 30 -X POST "$BASE/gradio_api/call/v2/respond" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"reasoning":"off","temperature":0.1,"top_p":0.8,"top_k":20}')
+          echo "$SUBMIT"
+          EVENT_ID=$(printf '%s' "$SUBMIT" | jq -r '.event_id')
+          test -n "$EVENT_ID" && test "$EVENT_ID" != 'null'
           echo
-          echo '--- Gradio named endpoints ---'
-          curl -fsS --max-time 20 "$BASE/gradio_api/info" | jq '.named_endpoints'
+          echo '--- live inference result ---'
+          curl -fsS -N --max-time 120 "$BASE/gradio_api/call/respond/$EVENT_ID" | tee /tmp/result.sse
+          grep -Eq '^event: (complete|generating)' /tmp/result.sse
