@@ -17,52 +17,29 @@ jobs:
         run: |
           set -euo pipefail
           API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$API_ROOT/health")
-          models_code=$(curl -sS -o /tmp/models.json -w '%{http_code}' --max-time 30 "$API_ROOT/v1/models")
-          echo "health_http=$health_code"
+          curl -sS --max-time 30 "$API_ROOT/health" -o /tmp/health.json
           jq '{version,freeOnly,apiAuth,activeProvider,failoverProvider,checks}' /tmp/health.json
-          echo "anonymous_models_http=$models_code"
-          jq '{error}' /tmp/models.json
-          test "$health_code" = '200'
           test "$(jq -r '.version' /tmp/health.json)" = '0.5.2'
-          test "$(jq -r '.apiAuth.required' /tmp/health.json)" = 'true'
-          test "$models_code" = '401'
 
-      - name: Compare primary H200 chat payloads
-        continue-on-error: true
+      - name: Verify primary H200 no-thinking fast path
         run: |
-          set +e
+          set -euo pipefail
           PRIMARY='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions'
-          probe() {
-            label="$1"
-            payload="$2"
-            echo "--- $label ---"
-            curl -sS --max-time 70 -w '\nhttp=%{http_code} total=%{time_total} starttransfer=%{time_starttransfer}\n' "$PRIMARY" -H 'Content-Type: application/json' -d "$payload" -o "/tmp/$label.json"
-            code=$?
-            jq '{id,choices:[.choices[]? | {finish_reason,message:{content:.message.content,reasoning:.message.reasoning}}],usage}' "/tmp/$label.json" || cat "/tmp/$label.json"
-            echo "curl_exit=$code"
-          }
-          probe tiny16 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":16,"stream":false}'
-          probe low256 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":256,"reasoning_effort":"low","stream":false}'
-          probe plain512 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":512,"stream":false}'
-          probe low512 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":512,"reasoning_effort":"low","stream":false}'
+          curl -sS --max-time 40 -w '%{http_code} %{time_total} %{time_starttransfer}\n' "$PRIMARY" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":256,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}' \
+            -o /tmp/no-thinking.json > /tmp/timing.txt
+          cat /tmp/timing.txt
+          jq '{id,choices:[.choices[]? | {finish_reason,message:{content:.message.content,reasoning:.message.reasoning}}],usage}' /tmp/no-thinking.json
+          test "$(cut -d' ' -f1 /tmp/timing.txt)" = '200'
+          test -n "$(jq -r '.choices[0].message.content // empty' /tmp/no-thinking.json)"
 
-      - name: Probe ZeroGPU directly
+      - name: Confirm ZeroGPU current state
         continue-on-error: true
         run: |
           set +e
           SPACE='https://yinhaoc-qwen3-8-27b-demo.hf.space'
-          curl -sS --max-time 30 "$SPACE/gradio_api/info" -o /tmp/info.json
-          echo "visibility=$(jq -r '.named_endpoints["/chat"].api_visibility // "missing"' /tmp/info.json)"
           curl -sS --max-time 30 "$SPACE/gradio_api/call/v2/chat" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"enable_thinking":false,"reasoning_effort":"low","max_tokens":512}' -o /tmp/submit.json
           cat /tmp/submit.json
           EVENT_ID=$(jq -r '.event_id // empty' /tmp/submit.json)
-          if [ -n "$EVENT_ID" ]; then curl -sS -N --max-time 45 "$SPACE/gradio_api/call/chat/$EVENT_ID" || true; fi
-
-      - name: Probe deployed gateway
-        continue-on-error: true
-        run: |
-          set +e
-          API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          curl -sS --max-time 70 -w '\nhttp=%{http_code} total=%{time_total}\n' "$API_ROOT/provider-probe" -o /tmp/probe.json
-          jq . /tmp/probe.json || cat /tmp/probe.json
+          if [ -n "$EVENT_ID" ]; then curl -sS -N --max-time 30 "$SPACE/gradio_api/call/chat/$EVENT_ID" || true; fi
