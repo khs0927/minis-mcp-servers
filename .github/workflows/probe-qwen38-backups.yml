@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/probe-qwen38-backups.yml'
 
 jobs:
   health:
@@ -33,6 +38,10 @@ jobs:
           echo "gateway_http=$gateway_code"
           if [ -s /tmp/gateway.json ]; then jq '{version,freeOnly,activeProvider,failoverProvider,checks}' /tmp/gateway.json || true; fi
 
+          if [ "$gateway_code" != '200' ]; then
+            echo 'Gateway health endpoint is unavailable.' >&2
+            exit 1
+          fi
           if [ "$primary_ok" != 'true' ] && [ "$backup_ok" != 'true' ]; then
             echo 'Both zero-cost Qwen3.8 providers are unavailable.' >&2
             exit 1
