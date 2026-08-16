@@ -13,27 +13,22 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Inspect apathy exact-model Space server
+      - name: Verify apathy Qwen3.8 OpenAI-compatible inference
         run: |
           set -euo pipefail
-          APP='https://huggingface.co/spaces/apathy-exe/Qwen3.8-27B/resolve/main/app.py'
-          curl -L -sS --max-time 30 "$APP" -o /tmp/app.py
-          echo '--- imports and constants ---'
-          sed -n '1,90p' /tmp/app.py
-          echo '--- server routes ---'
-          sed -n '90,180p' /tmp/app.py
-          echo '--- remaining handlers ---'
-          sed -n '180,320p' /tmp/app.py
-
-      - name: Probe likely apathy routes
-        continue-on-error: true
-        run: |
-          set +e
           BASE='https://apathy-exe-qwen3-8-27b.hf.space'
-          for path in / /health /v1/models /models /docs /openapi.json /gradio_api/info; do
-            echo "--- GET $path ---"
-            code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 20 "$BASE$path")
-            echo "http=$code"
-            head -c 2000 /tmp/body || true
-            echo
-          done
+          echo '--- health/models ---'
+          curl -sS --max-time 20 "$BASE/health"
+          echo
+          curl -sS --max-time 20 "$BASE/v1/models" -o /tmp/models.json
+          jq '{object,data:[.data[]? | {id,owned_by,meta:{n_params:.meta.n_params,n_ctx:.meta.n_ctx,ftype:.meta.ftype}}]}' /tmp/models.json
+          echo '--- chat using public model id ---'
+          curl -sS --max-time 60 -w '\nhttp=%{http_code} total=%{time_total} start=%{time_starttransfer}\n' \
+            "$BASE/v1/chat/completions" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":64,"temperature":0.2,"stream":false}' \
+            -o /tmp/chat.json > /tmp/timing.txt
+          cat /tmp/timing.txt
+          jq '{id,model,choices:[.choices[]? | {finish_reason,message:.message}],usage}' /tmp/chat.json || cat /tmp/chat.json
+          test "$(cut -d' ' -f1 /tmp/timing.txt | cut -d= -f2)" = '200'
+          test -n "$(jq -r '.choices[0].message.content // empty' /tmp/chat.json)"
