@@ -13,20 +13,19 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Verify H200 tool compatibility
+      - name: Verify H200 output token limits
         run: |
           set +e
           BASE='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions'
-          TOOL='{"type":"function","function":{"name":"get_time","description":"Get current time","parameters":{"type":"object","properties":{},"additionalProperties":false}}}'
           probe() {
             label="$1"
             payload="$2"
             echo "===== $label ====="
-            code=$(curl -sS --max-time 30 -o "/tmp/$label.out" -w '%{http_code}' "$BASE" -H 'Content-Type: application/json' -d "$payload")
+            code=$(curl -sS --max-time 25 -o "/tmp/$label.out" -w '%{http_code}' "$BASE" -H 'Content-Type: application/json' -d "$payload")
             echo "http=$code"
             head -c 2500 "/tmp/$label.out"
             echo
           }
-          probe no_tools '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":32,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}'
-          probe with_tools "{\"model\":\"Qwen/Qwen3.8-27B\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply exactly OK\"}],\"max_tokens\":32,\"stream\":false,\"chat_template_kwargs\":{\"enable_thinking\":false},\"tools\":[$TOOL]}"
-          probe tools_none "{\"model\":\"Qwen/Qwen3.8-27B\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply exactly OK\"}],\"max_tokens\":32,\"stream\":false,\"chat_template_kwargs\":{\"enable_thinking\":false},\"tools\":[$TOOL],\"tool_choice\":\"none\"}"
+          probe max_8192 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":8192,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}'
+          probe max_completion_8192 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_completion_tokens":8192,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}'
+          probe max_32768 '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":32768,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}'
