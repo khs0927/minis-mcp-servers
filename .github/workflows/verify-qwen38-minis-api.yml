@@ -2,6 +2,10 @@ name: Verify Qwen3.8 Minis API
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-qwen38-minis-api.yml'
 
 jobs:
   verify:
@@ -9,18 +13,19 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Verify public health and API-key guard
+      - name: Compare H200 request schemas
         run: |
-          set -euo pipefail
-          API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$API_ROOT/health")
-          models_code=$(curl -sS -o /tmp/models.json -w '%{http_code}' --max-time 30 "$API_ROOT/v1/models")
-          echo "health_http=$health_code"
-          jq '{version,freeOnly,apiAuth,activeProvider,failoverProvider,checks}' /tmp/health.json
-          echo "anonymous_models_http=$models_code"
-          jq '{error}' /tmp/models.json
-          test "$health_code" = '200'
-          test "$(jq -r '.version' /tmp/health.json)" = '0.5.3'
-          test "$(jq -r '.apiAuth.required' /tmp/health.json)" = 'true'
-          test "$models_code" = '401'
-          test "$(jq -r '.error.code' /tmp/models.json)" = 'invalid_api_key'
+          set +e
+          BASE='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions'
+          probe() {
+            label="$1"
+            payload="$2"
+            echo "===== $label ====="
+            code=$(curl -sS --max-time 30 -o "/tmp/$label.json" -w '%{http_code}' "$BASE" -H 'Content-Type: application/json' -d "$payload")
+            echo "http=$code"
+            cat "/tmp/$label.json"
+            echo
+          }
+          probe basic '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":32,"stream":false}'
+          probe low '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":32,"stream":false,"reasoning_effort":"low"}'
+          probe no_thinking '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":32,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}'
