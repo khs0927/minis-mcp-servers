@@ -13,43 +13,27 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check current gateway
+      - name: Inspect apathy exact-model Space server
         run: |
           set -euo pipefail
-          API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          curl -sS --max-time 30 "$API_ROOT/health" | jq '{version,activeProvider,failoverProvider,checks}'
+          APP='https://huggingface.co/spaces/apathy-exe/Qwen3.8-27B/resolve/main/app.py'
+          curl -L -sS --max-time 30 "$APP" -o /tmp/app.py
+          echo '--- imports and constants ---'
+          sed -n '1,90p' /tmp/app.py
+          echo '--- server routes ---'
+          sed -n '90,180p' /tmp/app.py
+          echo '--- remaining handlers ---'
+          sed -n '180,320p' /tmp/app.py
 
-      - name: Discover official-demo Space endpoints
+      - name: Probe likely apathy routes
         continue-on-error: true
         run: |
           set +e
-          repos=(
-            'NodeLinker/Qwen-3.8-27B-H200'
-            'victor/Qwen3.8-27B-free-endpoint'
-            'apathy-exe/Qwen3.8-27B'
-            'akhaliq/Qwen3.8-27B'
-            'Yinhaoc/qwen3.8-27b-demo'
-            'JonathanColetti/Qwen3.8-27B-Uncensored-Demo'
-          )
-          for repo in "${repos[@]}"; do
-            echo "===== $repo ====="
-            curl -sS --max-time 20 "https://huggingface.co/api/spaces/$repo" -o /tmp/space.json
-            jq '{id,sdk,subdomain,private,lastModified,runtime}' /tmp/space.json || cat /tmp/space.json
-            sub=$(jq -r '.subdomain // empty' /tmp/space.json)
-            if [ -n "$sub" ]; then
-              echo "space_url=https://$sub.hf.space"
-              code=$(curl -sS -o /tmp/info.json -w '%{http_code}' --max-time 15 "https://$sub.hf.space/gradio_api/info")
-              echo "gradio_info_http=$code"
-              if [ "$code" = '200' ]; then
-                jq '{named_endpoints:(.named_endpoints | to_entries | map({name:.key,visibility:.value.api_visibility,params:(.value.parameters|map(.parameter_name))}))}' /tmp/info.json
-              fi
-            fi
-            for file in index.html README.md app.py; do
-              url="https://huggingface.co/spaces/$repo/resolve/main/$file"
-              code=$(curl -L -sS -o /tmp/repo-file -w '%{http_code}' --max-time 15 "$url")
-              if [ "$code" = '200' ]; then
-                echo "--- $file endpoint hints ---"
-                grep -Ein 'endpoints\.huggingface\.cloud|hf\.space|endpoint|base.?url|gradio|chat/completions|Qwen/Qwen3.8-27B' /tmp/repo-file | head -40 || true
-              fi
-            done
+          BASE='https://apathy-exe-qwen3-8-27b.hf.space'
+          for path in / /health /v1/models /models /docs /openapi.json /gradio_api/info; do
+            echo "--- GET $path ---"
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 20 "$BASE$path")
+            echo "http=$code"
+            head -c 2000 /tmp/body || true
+            echo
           done
