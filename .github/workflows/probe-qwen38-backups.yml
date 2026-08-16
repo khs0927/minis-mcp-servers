@@ -17,8 +17,15 @@ jobs:
       - name: Probe live gateway backup discovery
         run: |
           set -euo pipefail
-          API='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api/provider-probe'
-          curl -fsS --max-time 30 "$API" | tee /tmp/probe.json
+          GATEWAY='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api/provider-probe'
+          curl -fsS --max-time 30 "$GATEWAY" | tee /tmp/probe.json
+          BASE=$(jq -r '.baseUrl' /tmp/probe.json)
           echo
-          echo '--- parsed summary ---'
+          echo '--- provider summary ---'
           jq '{name,repo,baseUrl,metadata,openapi,info,mcp,usableAsPublicApi,usableAsPublicMcp}' /tmp/probe.json
+          echo
+          echo '--- respond OpenAPI ---'
+          curl -fsS --max-time 20 "$BASE/gradio_api/openapi.json" | jq '.paths["/gradio_api/call/v2/respond"]'
+          echo
+          echo '--- Gradio named endpoints ---'
+          curl -fsS --max-time 20 "$BASE/gradio_api/info" | jq '.named_endpoints'
