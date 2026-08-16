@@ -48,9 +48,8 @@ jobs:
               url="https://huggingface.co/spaces/$repo/resolve/main/$file"
               code=$(curl -L -sS -o /tmp/repo-file -w '%{http_code}' --max-time 15 "$url")
               if [ "$code" = '200' ]; then
-                echo "--- $file URLs/endpoints ---"
-                grep -Eo 'https://[^"'"' <>)]+' /tmp/repo-file | grep -E 'endpoints\.huggingface\.cloud|hf\.space|/v1|api' | head -20 || true
-                grep -Ein 'endpoint|base.?url|gradio|chat/completions|Qwen/Qwen3.8-27B' /tmp/repo-file | head -30 || true
+                echo "--- $file endpoint hints ---"
+                grep -Ein 'endpoints\.huggingface\.cloud|hf\.space|endpoint|base.?url|gradio|chat/completions|Qwen/Qwen3.8-27B' /tmp/repo-file | head -40 || true
               fi
             done
           done
