@@ -14,21 +14,22 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Search and probe public Qwen3.8 Spaces
+      - name: Inspect strongest Qwen3.8 backup candidates
         run: |
           set -euo pipefail
-          echo '--- HF Space search ---'
-          curl -fsS --max-time 30 'https://huggingface.co/api/spaces?search=Qwen3.8-27B&limit=50&full=true' -o /tmp/spaces.json
-          jq -r '.[] | [.id, (.runtime.stage // ""), (.runtime.hardware.current // ""), (.sdk // ""), ((.tags // [])|join(","))] | @tsv' /tmp/spaces.json
-          echo
-          echo '--- candidate OpenAPI probes ---'
-          jq -r '.[].id' /tmp/spaces.json | while read -r ID; do
-            META=$(curl -fsS --max-time 15 "https://huggingface.co/api/spaces/$ID" || true)
-            SUB=$(printf '%s' "$META" | jq -r '.subdomain // empty' 2>/dev/null || true)
-            STAGE=$(printf '%s' "$META" | jq -r '.runtime.stage // empty' 2>/dev/null || true)
-            [ -n "$SUB" ] || continue
+          for ID in 'akhaliq/Qwen3.8-27B' 'Yinhaoc/qwen3.8-27b-demo' 'apathy-exe/Qwen3.8-27B' 'apathy-exe/Qwen3.8-27B-2' 'Daankular/Qwen3.8-27B' 'NodeLinker/Qwen-3.8-27B-H200'; do
+            echo "=== $ID ==="
+            META=$(curl -fsS --max-time 20 "https://huggingface.co/api/spaces/$ID")
+            SUB=$(printf '%s' "$META" | jq -r '.subdomain')
             BASE="https://$SUB.hf.space"
-            CODE=$(curl -sS -o /tmp/openapi.json -w '%{http_code}' --max-time 10 "$BASE/gradio_api/openapi.json" || true)
-            PATHS=$(jq -r '[.paths|keys[]? | select(test("/call/"))] | join(",")' /tmp/openapi.json 2>/dev/null || true)
-            printf '%s\t%s\t%s\t%s\t%s\n' "$ID" "$STAGE" "$BASE" "$CODE" "$PATHS"
+            printf '%s' "$META" | jq '{id,sdk,runtime,models,tags}'
+            echo "BASE=$BASE"
+            if curl -fsS --max-time 15 "$BASE/gradio_api/info" -o /tmp/info.json; then
+              jq '{named_endpoints: (.named_endpoints | with_entries(.value |= {api_visibility, description, parameters: [.parameters[]? | {parameter_name, parameter_default, parameter_has_default, type}]}))}' /tmp/info.json
+            else
+              echo 'NO_GRADIO_INFO'
+            fi
+            echo 'ROOT_URLS:'
+            curl -fsSL --max-time 15 "$BASE/" 2>/dev/null | grep -Eo 'https://[^"<> ]+' | head -20 || true
+            echo
           done
