@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.khs0927/qwen38-free-gateway",
-  "description": "Free Qwen3.8-27B gateway with immediate-start SSE, retry/failover, Bearer auth, and MCP.",
-  "version": "0.6.1",
-  "websiteUrl": "https://qwen3-8-free-gateway-n995yy.v2.appdeploy.ai/",
+  "description": "Free Qwen3.8-27B gateway with isolated Minis provider, SSE, retry/failover, and MCP.",
+  "version": "0.6.2",
+  "websiteUrl": "https://minis-eve-glm52-provider.vercel.app/qwen/setup",
   "remotes": [
     {
       "type": "streamable-http",
@@ -12,7 +12,7 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "keywords": ["qwen", "qwen3.8", "llm", "gateway", "openai-compatible", "api-key", "streaming", "sse", "immediate-start", "retry", "failover", "free-first", "vercel", "zerogpu"]
+      "keywords": ["qwen", "qwen3.8", "llm", "gateway", "openai-compatible", "api-key", "streaming", "sse", "minis", "provider-import", "retry", "failover", "free-first", "vercel", "zerogpu"]
     }
   }
 }
