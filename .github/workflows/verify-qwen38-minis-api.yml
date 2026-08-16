@@ -2,10 +2,6 @@ name: Verify Qwen3.8 Minis API
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/verify-qwen38-minis-api.yml'
 
 jobs:
   verify:
@@ -24,7 +20,7 @@ jobs:
           echo "anonymous_models_http=$models_code"
           jq '{error}' /tmp/models.json
           test "$health_code" = '200'
-          test "$(jq -r '.version' /tmp/health.json)" = '0.5.0'
+          test "$(jq -r '.version' /tmp/health.json)" = '0.5.1'
           test "$(jq -r '.apiAuth.required' /tmp/health.json)" = 'true'
           test "$models_code" = '401'
           test "$(jq -r '.error.code' /tmp/models.json)" = 'invalid_api_key'
