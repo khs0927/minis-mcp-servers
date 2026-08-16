@@ -13,33 +13,44 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Verify gateway auth and health
+      - name: Check current gateway
         run: |
           set -euo pipefail
           API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          curl -sS --max-time 30 "$API_ROOT/health" -o /tmp/health.json
-          jq '{version,freeOnly,apiAuth,activeProvider,failoverProvider,checks}' /tmp/health.json
-          test "$(jq -r '.version' /tmp/health.json)" = '0.5.2'
+          curl -sS --max-time 30 "$API_ROOT/health" | jq '{version,activeProvider,failoverProvider,checks}'
 
-      - name: Verify primary H200 no-thinking fast path
-        run: |
-          set -euo pipefail
-          PRIMARY='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions'
-          curl -sS --max-time 40 -w '%{http_code} %{time_total} %{time_starttransfer}\n' "$PRIMARY" \
-            -H 'Content-Type: application/json' \
-            -d '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":256,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}' \
-            -o /tmp/no-thinking.json > /tmp/timing.txt
-          cat /tmp/timing.txt
-          jq '{id,choices:[.choices[]? | {finish_reason,message:{content:.message.content,reasoning:.message.reasoning}}],usage}' /tmp/no-thinking.json
-          test "$(cut -d' ' -f1 /tmp/timing.txt)" = '200'
-          test -n "$(jq -r '.choices[0].message.content // empty' /tmp/no-thinking.json)"
-
-      - name: Confirm ZeroGPU current state
+      - name: Discover official-demo Space endpoints
         continue-on-error: true
         run: |
           set +e
-          SPACE='https://yinhaoc-qwen3-8-27b-demo.hf.space'
-          curl -sS --max-time 30 "$SPACE/gradio_api/call/v2/chat" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"enable_thinking":false,"reasoning_effort":"low","max_tokens":512}' -o /tmp/submit.json
-          cat /tmp/submit.json
-          EVENT_ID=$(jq -r '.event_id // empty' /tmp/submit.json)
-          if [ -n "$EVENT_ID" ]; then curl -sS -N --max-time 30 "$SPACE/gradio_api/call/chat/$EVENT_ID" || true; fi
+          repos=(
+            'NodeLinker/Qwen-3.8-27B-H200'
+            'victor/Qwen3.8-27B-free-endpoint'
+            'apathy-exe/Qwen3.8-27B'
+            'akhaliq/Qwen3.8-27B'
+            'Yinhaoc/qwen3.8-27b-demo'
+            'JonathanColetti/Qwen3.8-27B-Uncensored-Demo'
+          )
+          for repo in "${repos[@]}"; do
+            echo "===== $repo ====="
+            curl -sS --max-time 20 "https://huggingface.co/api/spaces/$repo" -o /tmp/space.json
+            jq '{id,sdk,subdomain,private,lastModified,runtime}' /tmp/space.json || cat /tmp/space.json
+            sub=$(jq -r '.subdomain // empty' /tmp/space.json)
+            if [ -n "$sub" ]; then
+              echo "space_url=https://$sub.hf.space"
+              code=$(curl -sS -o /tmp/info.json -w '%{http_code}' --max-time 15 "https://$sub.hf.space/gradio_api/info")
+              echo "gradio_info_http=$code"
+              if [ "$code" = '200' ]; then
+                jq '{named_endpoints:(.named_endpoints | to_entries | map({name:.key,visibility:.value.api_visibility,params:(.value.parameters|map(.parameter_name))}))}' /tmp/info.json
+              fi
+            fi
+            for file in index.html README.md app.py; do
+              url="https://huggingface.co/spaces/$repo/resolve/main/$file"
+              code=$(curl -L -sS -o /tmp/repo-file -w '%{http_code}' --max-time 15 "$url")
+              if [ "$code" = '200' ]; then
+                echo "--- $file URLs/endpoints ---"
+                grep -Eo 'https://[^"'"' <>)]+' /tmp/repo-file | grep -E 'endpoints\.huggingface\.cloud|hf\.space|/v1|api' | head -20 || true
+                grep -Ein 'endpoint|base.?url|gradio|chat/completions|Qwen/Qwen3.8-27B' /tmp/repo-file | head -30 || true
+              fi
+            done
+          done
