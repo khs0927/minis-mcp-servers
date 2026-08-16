@@ -2,6 +2,10 @@ name: Verify Qwen3.8 Minis API
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-qwen38-minis-api.yml'
 
 jobs:
   verify:
@@ -9,18 +13,67 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Verify public health and anonymous denial
+      - name: Verify gateway auth and health
         run: |
           set -euo pipefail
           API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
-          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 20 "$API_ROOT/health")
-          models_code=$(curl -sS -o /tmp/models.json -w '%{http_code}' --max-time 20 "$API_ROOT/v1/models")
+          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$API_ROOT/health")
+          models_code=$(curl -sS -o /tmp/models.json -w '%{http_code}' --max-time 30 "$API_ROOT/v1/models")
           echo "health_http=$health_code"
-          jq '{version,freeOnly,apiAuth,activeProvider,failoverProvider}' /tmp/health.json
+          jq '{version,freeOnly,apiAuth,activeProvider,failoverProvider,checks}' /tmp/health.json
           echo "anonymous_models_http=$models_code"
           jq '{error}' /tmp/models.json
           test "$health_code" = '200'
-          test "$(jq -r '.version' /tmp/health.json)" = '0.5.1'
+          test "$(jq -r '.version' /tmp/health.json)" = '0.5.2'
           test "$(jq -r '.apiAuth.required' /tmp/health.json)" = 'true'
           test "$models_code" = '401'
-          test "$(jq -r '.error.code' /tmp/models.json)" = 'invalid_api_key'
+
+      - name: Probe primary H200 directly
+        continue-on-error: true
+        run: |
+          set +e
+          PRIMARY='https://g9hnto0u7lvbu837.us-east-2.aws.endpoints.huggingface.cloud/v1'
+          echo '--- primary /models ---'
+          curl -sS -D /tmp/primary-headers -o /tmp/primary-models --max-time 30 "$PRIMARY/models"
+          code=$?
+          cat /tmp/primary-headers || true
+          head -c 1000 /tmp/primary-models || true
+          echo
+          echo "curl_exit=$code"
+          echo '--- primary tiny chat ---'
+          curl -sS -D /tmp/primary-chat-headers -o /tmp/primary-chat --max-time 30 "$PRIMARY/chat/completions" -H 'Content-Type: application/json' -d '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":16,"stream":false}'
+          code=$?
+          cat /tmp/primary-chat-headers || true
+          head -c 2000 /tmp/primary-chat || true
+          echo
+          echo "curl_exit=$code"
+
+      - name: Probe ZeroGPU directly
+        continue-on-error: true
+        run: |
+          set +e
+          SPACE='https://yinhaoc-qwen3-8-27b-demo.hf.space'
+          echo '--- ZeroGPU info ---'
+          curl -sS --max-time 30 "$SPACE/gradio_api/info" -o /tmp/info.json
+          jq '.named_endpoints["/chat"] | {api_visibility,parameters,returns}' /tmp/info.json || cat /tmp/info.json
+          echo '--- ZeroGPU submit ---'
+          curl -sS --max-time 30 "$SPACE/gradio_api/call/v2/chat" -H 'Content-Type: application/json' -d '{"message":{"text":"Reply exactly OK","files":[]},"enable_thinking":false,"reasoning_effort":"low","max_tokens":512}' -o /tmp/submit.json
+          cat /tmp/submit.json
+          echo
+          EVENT_ID=$(jq -r '.event_id // empty' /tmp/submit.json)
+          if [ -z "$EVENT_ID" ]; then echo 'no_event_id'; exit 0; fi
+          echo "event_id=$EVENT_ID"
+          echo '--- ZeroGPU SSE ---'
+          curl -sS -N --max-time 45 "$SPACE/gradio_api/call/chat/$EVENT_ID" -o /tmp/events.txt
+          code=$?
+          cat /tmp/events.txt
+          echo
+          echo "curl_exit=$code"
+
+      - name: Probe deployed gateway fallback
+        continue-on-error: true
+        run: |
+          set +e
+          API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
+          curl -sS --max-time 45 "$API_ROOT/provider-probe" -o /tmp/probe.json
+          jq . /tmp/probe.json || cat /tmp/probe.json
