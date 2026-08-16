@@ -2,10 +2,6 @@ name: Verify Qwen3.8 Minis API
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/verify-qwen38-minis-api.yml'
 
 jobs:
   verify:
@@ -13,22 +9,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Verify apathy Qwen3.8 OpenAI-compatible inference
+      - name: Verify public health and API-key guard
         run: |
           set -euo pipefail
-          BASE='https://apathy-exe-qwen3-8-27b.hf.space'
-          echo '--- health/models ---'
-          curl -sS --max-time 20 "$BASE/health"
-          echo
-          curl -sS --max-time 20 "$BASE/v1/models" -o /tmp/models.json
-          jq '{object,data:[.data[]? | {id,owned_by,meta:{n_params:.meta.n_params,n_ctx:.meta.n_ctx,ftype:.meta.ftype}}]}' /tmp/models.json
-          echo '--- chat using public model id ---'
-          curl -sS --max-time 60 -w '\nhttp=%{http_code} total=%{time_total} start=%{time_starttransfer}\n' \
-            "$BASE/v1/chat/completions" \
-            -H 'Content-Type: application/json' \
-            -d '{"model":"Qwen/Qwen3.8-27B","messages":[{"role":"user","content":"Reply exactly OK"}],"max_tokens":64,"temperature":0.2,"stream":false}' \
-            -o /tmp/chat.json > /tmp/timing.txt
-          cat /tmp/timing.txt
-          jq '{id,model,choices:[.choices[]? | {finish_reason,message:.message}],usage}' /tmp/chat.json || cat /tmp/chat.json
-          test "$(cut -d' ' -f1 /tmp/timing.txt | cut -d= -f2)" = '200'
-          test -n "$(jq -r '.choices[0].message.content // empty' /tmp/chat.json)"
+          API_ROOT='https://api-v2.appdeploy.ai/app/qwen3-8-free-gateway-n995yy/api'
+          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 30 "$API_ROOT/health")
+          models_code=$(curl -sS -o /tmp/models.json -w '%{http_code}' --max-time 30 "$API_ROOT/v1/models")
+          echo "health_http=$health_code"
+          jq '{version,freeOnly,apiAuth,activeProvider,failoverProvider,checks}' /tmp/health.json
+          echo "anonymous_models_http=$models_code"
+          jq '{error}' /tmp/models.json
+          test "$health_code" = '200'
+          test "$(jq -r '.version' /tmp/health.json)" = '0.5.3'
+          test "$(jq -r '.apiAuth.required' /tmp/health.json)" = 'true'
+          test "$models_code" = '401'
+          test "$(jq -r '.error.code' /tmp/models.json)" = 'invalid_api_key'
