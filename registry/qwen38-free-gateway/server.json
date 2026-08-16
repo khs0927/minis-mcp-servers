@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.khs0927/qwen38-free-gateway",
-  "description": "Free Qwen3.8-27B gateway with bearer-key OpenAI API, transient H200 retries, fast no-thinking mode, ZeroGPU failover, and MCP.",
+  "description": "Free Qwen3.8-27B gateway with Bearer API, H200 retry, ZeroGPU failover, and MCP.",
   "version": "0.5.3",
   "websiteUrl": "https://qwen3-8-free-gateway-n995yy.v2.appdeploy.ai/",
   "remotes": [
