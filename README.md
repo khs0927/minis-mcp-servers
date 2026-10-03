@@ -10,7 +10,8 @@ These servers expose iPhone capabilities — Shortcuts, Health, Reminders, Calen
 
 | Server | Transport | Tools | Key Feature |
 |--------|-----------|-------|-------------|
-| `ios-shortcuts` | stdio | `list_actions`, `validate_shortcut` | Create iOS Shortcuts from natural language |\n| `go-ios-control` | stdio | device/app/UI/browser tools | Physical iPhone control through upstream go-ios |
+| `ios-shortcuts` | stdio | `list_actions`, `validate_shortcut` | Create iOS Shortcuts from natural language |
+| `go-ios-control` | stdio | device/app/UI/browser tools | Physical iPhone control through upstream go-ios |
 | `complete-agent` | stdio | `plan`, `status`, `verify`, `trace` | Evidence-gated mission execution |
 | `hermes` | stdio | `hermes_orchestrate`, `hermes_chat`, `hermes_roles` | Korean sub-agent orchestration |
 | `orchestrator` | stdio | `call_orchestrator` | Legacy compatibility bridge |
