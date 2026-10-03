@@ -1,0 +1,23 @@
+{
+  "upstream": {
+    "repository": "https://github.com/danielpaulus/go-ios",
+    "commit": "273d3e06e803fb6ee95e4df914d8be82c5ee4bb0",
+    "license": "MIT"
+  },
+  "verified_at": "2026-10-03",
+  "declared_capabilities": [
+    "list connected iOS devices and apps",
+    "launch and terminate apps",
+    "capture screenshots",
+    "run WebDriverAgent/XCTest cross-platform",
+    "UI tap/swipe/type/source via WDA or DeviceKit",
+    "Web Inspector list/launch/eval",
+    "CDP bridge",
+    "iOS 17+ tunnel support"
+  ],
+  "project_verification": {
+    "static_contract_tests": "implemented",
+    "github_ci": "pending",
+    "physical_iphone_e2e": "not_verified"
+  }
+}
