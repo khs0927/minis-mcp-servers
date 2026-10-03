@@ -1,0 +1,29 @@
+name: go-ios control MCP
+
+on:
+  push:
+    paths:
+      - "servers/go-ios-control/**"
+      - ".github/workflows/go-ios-control-ci.yml"
+  pull_request:
+    paths:
+      - "servers/go-ios-control/**"
+      - ".github/workflows/go-ios-control-ci.yml"
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: servers/go-ios-control
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --no-audit --no-fund
+      - run: npm run ci
