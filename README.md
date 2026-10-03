@@ -10,7 +10,7 @@ These servers expose iPhone capabilities — Shortcuts, Health, Reminders, Calen
 
 | Server | Transport | Tools | Key Feature |
 |--------|-----------|-------|-------------|
-| `ios-shortcuts` | stdio | `list_actions`, `validate_shortcut` | Create iOS Shortcuts from natural language |
+| `ios-shortcuts` | stdio | `list_actions`, `validate_shortcut` | Create iOS Shortcuts from natural language |\n| `go-ios-control` | stdio | device/app/UI/browser tools | Physical iPhone control through upstream go-ios |
 | `complete-agent` | stdio | `plan`, `status`, `verify`, `trace` | Evidence-gated mission execution |
 | `hermes` | stdio | `hermes_orchestrate`, `hermes_chat`, `hermes_roles` | Korean sub-agent orchestration |
 | `orchestrator` | stdio | `call_orchestrator` | Legacy compatibility bridge |
@@ -28,6 +28,16 @@ Automate iOS Shortcuts creation through LLM. Translates natural language into Sh
 ```
 
 **Status**: SAFE_MODE (no shell/run). macOS `shortcuts` CLI needed for sign/import — not available on iSH, but `list_actions` and `validate` work anywhere.
+
+---
+
+## go-ios Control MCP Server
+
+A real execution adapter around `danielpaulus/go-ios`. It keeps go-ios as the device protocol implementation and adds a small MCP surface for device/app discovery, launch/terminate, screenshots, UI gestures/source, and Web Inspector browser control.
+
+**Status**: wrapper implemented; CI and physical-iPhone E2E are tracked separately. A green static CI run is not evidence that a real iPhone has been controlled.
+
+See [servers/go-ios-control](servers/go-ios-control).
 
 ---
 
