@@ -17,7 +17,7 @@
   ],
   "project_verification": {
     "static_contract_tests": "implemented",
-    "github_ci": "pending",
+    "github_ci": "success: PR #1 run 37119845258 (ubuntu-latest + windows-latest, Node 22)",
     "physical_iphone_e2e": "not_verified"
   }
 }
